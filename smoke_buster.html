@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>灭烟小能手</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #1a1a2e; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: 'Arial', sans-serif; overflow: hidden; }
+  #gameContainer { position: relative; width: 800px; height: 560px; overflow: hidden; border-radius: 12px; box-shadow: 0 0 40px rgba(0,200,255,0.3); }
+  canvas { display: block; cursor: crosshair; }
+  #ui { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 10; }
+  #hud { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); }
+  .hud-left, .hud-right { display: flex; flex-direction: column; gap: 4px; }
+  .hud-center { text-align: center; }
+  .hud-label { color: #aaa; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; }
+  .hud-value { color: #fff; font-size: 16px; font-weight: bold; }
+  #healthBar { width: 160px; height: 14px; background: #333; border-radius: 7px; overflow: hidden; border: 1px solid #555; }
+  #healthFill { height: 100%; background: linear-gradient(90deg, #ff4444, #ff8800, #44ff88); transition: width 0.3s; border-radius: 7px; }
+  #smokeBar { width: 160px; height: 14px; background: #333; border-radius: 7px; overflow: hidden; border: 1px solid #555; }
+  #smokeFill { height: 100%; background: linear-gradient(90deg, #88aacc, #aabbdd, #bbccee); transition: width 0.3s; border-radius: 7px; }
+  #moneyDisplay { color: #ffe066; font-size: 18px; font-weight: bold; }
+  #sceneName { color: #cceeff; font-size: 13px; }
+
+  /* Screens */
+  .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
+  #titleScreen { background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); }
+  #sceneSelect { background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460); }
+  #gameOverScreen { background: rgba(20, 0, 0, 0.92); display: none; }
+  #victoryScreen { background: rgba(0, 20, 10, 0.92); display: none; }
+
+  .game-title { font-size: 48px; font-weight: 900; color: #fff; text-shadow: 0 0 20px #00ccff, 0 4px 0 #0066aa; margin-bottom: 8px; letter-spacing: 4px; }
+  .game-subtitle { font-size: 16px; color: #88ccff; margin-bottom: 40px; letter-spacing: 2px; }
+  .big-emoji { font-size: 80px; margin-bottom: 16px; animation: bounce 1s infinite alternate; }
+  @keyframes bounce { from { transform: translateY(0) rotate(-5deg); } to { transform: translateY(-12px) rotate(5deg); } }
+
+  .btn { padding: 14px 40px; font-size: 18px; font-weight: bold; border: none; border-radius: 30px; cursor: pointer; transition: all 0.2s; letter-spacing: 2px; margin: 8px; pointer-events: all; }
+  .btn-primary { background: linear-gradient(135deg, #00b4db, #0083b0); color: #fff; box-shadow: 0 4px 15px rgba(0,180,219,0.4); }
+  .btn-primary:hover { transform: translateY(-3px) scale(1.05); box-shadow: 0 8px 25px rgba(0,180,219,0.6); }
+  .btn-danger { background: linear-gradient(135deg, #ff416c, #ff4b2b); color: #fff; }
+  .btn-success { background: linear-gradient(135deg, #11998e, #38ef7d); color: #fff; }
+
+  .scene-cards { display: flex; gap: 20px; margin: 20px 0; }
+  .scene-card { width: 200px; padding: 20px 16px; background: rgba(255,255,255,0.08); border: 2px solid rgba(255,255,255,0.15); border-radius: 16px; cursor: pointer; transition: all 0.2s; text-align: center; pointer-events: all; }
+  .scene-card:hover { transform: translateY(-6px) scale(1.03); border-color: #00ccff; background: rgba(0,200,255,0.12); box-shadow: 0 8px 25px rgba(0,200,255,0.3); }
+  .scene-card .scene-emoji { font-size: 48px; margin-bottom: 10px; }
+  .scene-card .scene-title { color: #fff; font-size: 16px; font-weight: bold; margin-bottom: 6px; }
+  .scene-card .scene-desc { color: #aaa; font-size: 12px; line-height: 1.4; }
+
+  .screen-title { font-size: 36px; font-weight: 900; color: #fff; margin-bottom: 8px; }
+  .screen-sub { font-size: 14px; color: #aaa; margin-bottom: 28px; }
+
+  /* Game Over */
+  #gameOverScreen .screen-title { color: #ff4444; text-shadow: 0 0 15px #ff0000; }
+  .facts-box { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,100,100,0.3); border-radius: 12px; padding: 20px 24px; max-width: 600px; margin: 16px 0; }
+  .facts-box h3 { color: #ffaa44; font-size: 16px; margin-bottom: 12px; }
+  .facts-box p { color: #ddd; font-size: 13px; line-height: 1.8; }
+  .facts-box strong { color: #ff8866; }
+
+  /* Floating score */
+  .float-score { position: absolute; font-size: 20px; font-weight: bold; color: #ffe066; text-shadow: 0 0 8px #ff8800; pointer-events: none; z-index: 30; animation: floatUp 1s forwards; }
+  @keyframes floatUp { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-60px); opacity: 0; } }
+
+  /* Controls hint */
+  #controls { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); color: rgba(255,255,255,0.4); font-size: 11px; z-index: 10; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="gameCanvas" width="800" height="560"></canvas>
+
+  <div id="ui">
+    <div id="hud">
+      <div class="hud-left">
+        <span class="hud-label">💖 生命值</span>
+        <div id="healthBar"><div id="healthFill" style="width:100%"></div></div>
+      </div>
+      <div class="hud-center">
+        <div id="moneyDisplay">💰 ¥0</div>
+        <div id="sceneName">——</div>
+      </div>
+      <div class="hud-right">
+        <span class="hud-label">💨 烟雾浓度</span>
+        <div id="smokeBar"><div id="smokeFill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Title Screen -->
+  <div class="screen" id="titleScreen">
+    <div class="big-emoji">👮</div>
+    <div class="game-title">灭烟小能手</div>
+    <div class="game-subtitle">守护公共场合 · 拒绝二手烟</div>
+    <button class="btn btn-primary" onclick="Game.showSceneSelect()">🎮 开始游戏</button>
+    <div style="color:#667; font-size:12px; margin-top:16px;">WASD / 方向键 移动 · 鼠标瞄准射击</div>
+  </div>
+
+  <!-- Scene Select -->
+  <div class="screen" id="sceneSelect" style="display:none">
+    <div class="screen-title">🗺️ 选择场景</div>
+    <div class="screen-sub">选择你的灭烟战场</div>
+    <div class="scene-cards">
+      <div class="scene-card" onclick="Game.startScene(0)">
+        <div class="scene-emoji">🏙️</div>
+        <div class="scene-title">城市人行道</div>
+        <div class="scene-desc">繁华街道上的烟雾挑战，行人熙攘</div>
+      </div>
+      <div class="scene-card" onclick="Game.startScene(1)">
+        <div class="scene-emoji">🚻</div>
+        <div class="scene-title">公共厕所楼道</div>
+        <div class="scene-desc">密闭空间烟雾扩散极快，速战速决！</div>
+      </div>
+      <div class="scene-card" onclick="Game.startScene(2)">
+        <div class="scene-emoji">✈️</div>
+        <div class="scene-title">机场进门口</div>
+        <div class="scene-desc">旅客众多，禁烟规定最严格</div>
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="Game.showTitle()" style="font-size:14px;padding:10px 28px">← 返回</button>
+  </div>
+
+  <!-- Game Over Screen -->
+  <div class="screen" id="gameOverScreen">
+    <div class="screen-title">💀 灭烟任务失败！</div>
+    <div class="screen-sub">烟雾侵袭，警察倒下了……</div>
+    <div class="facts-box">
+      <h3>📢 二手烟危害科普</h3>
+      <p>
+        🚬 <strong>二手烟含有超过 7000 种化学物质</strong>，其中至少 70 种已被证实可导致癌症。<br>
+        👶 <strong>儿童受害最深</strong>：长期暴露在二手烟中的儿童，患哮喘、肺炎、耳部感染的风险大幅上升。<br>
+        🤰 <strong>孕妇吸入二手烟</strong>可导致胎儿发育迟缓、早产、新生儿体重不足。<br>
+        ❤️ <strong>非吸烟者暴露于二手烟</strong>，患冠心病风险增加约 25-30%。<br>
+        🌍 全球每年有约 <strong>120 万人</strong>死于二手烟危害——他们从未吸过一根烟。<br><br>
+        <strong style="color:#ffee88">请自觉遵守禁烟规定，不在公共场合吸烟，保护他人健康！</strong>
+      </p>
+    </div>
+    <div style="display:flex;gap:12px">
+      <button class="btn btn-danger" onclick="Game.restartScene()">🔄 再战一次</button>
+      <button class="btn btn-primary" onclick="Game.showSceneSelect()">🗺️ 选择场景</button>
+    </div>
+  </div>
+
+  <!-- Victory Screen -->
+  <div class="screen" id="victoryScreen">
+    <div class="screen-title" style="color:#44ff88;text-shadow:0 0 15px #00ff88">🏆 任务完成！</div>
+    <div class="screen-sub" id="victoryMsg">烟雾清除，公共场合更安全了！</div>
+    <div style="font-size:64px;margin:16px 0">🎉</div>
+    <div style="display:flex;gap:12px">
+      <button class="btn btn-success" onclick="Game.showSceneSelect()">🗺️ 换个场景</button>
+      <button class="btn btn-primary" onclick="Game.showTitle()">🏠 返回主页</button>
+    </div>
+  </div>
+
+  <div id="controls">WASD/方向键移动 · 鼠标点击射水</div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const W = 800, H = 560;
+
+// ─── Audio ───────────────────────────────────────────────────────────────────
+const AudioCtx = window.AudioContext || window.webkitAudioContext;
+let audioCtx = null;
+function getAudio() { if (!audioCtx) audioCtx = new AudioCtx(); return audioCtx; }
+
+function playTone(freq, type, dur, vol=0.3, startFreq=null) {
+  try {
+    const ac = getAudio();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.connect(gain); gain.connect(ac.destination);
+    osc.type = type;
+    if (startFreq) { osc.frequency.setValueAtTime(startFreq, ac.currentTime); osc.frequency.exponentialRampToValueAtTime(freq, ac.currentTime + dur); }
+    else osc.frequency.setValueAtTime(freq, ac.currentTime);
+    gain.gain.setValueAtTime(vol, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + dur);
+    osc.start(); osc.stop(ac.currentTime + dur);
+  } catch(e) {}
+}
+function sfxShoot() { playTone(800, 'sine', 0.12, 0.2, 1200); }
+function sfxHit()   { playTone(300, 'square', 0.2, 0.25, 600); playTone(200,'sine',0.15,0.15); }
+function sfxMoney() { playTone(880,'sine',0.08,0.2); setTimeout(()=>playTone(1100,'sine',0.1,0.2),80); }
+function sfxDamage(){ playTone(100,'sawtooth',0.3,0.3,200); }
+function sfxGameOver(){ [220,196,175,150].forEach((f,i)=>setTimeout(()=>playTone(f,'sawtooth',0.5,0.3),i*200)); }
+
+// Background music loop
+let bgMusicNodes = [];
+function startBgMusic() {
+  stopBgMusic();
+  try {
+    const ac = getAudio();
+    const melody = [523,587,659,698,784,698,659,587];
+    let t = ac.currentTime;
+    const loop = () => {
+      melody.forEach((f,i) => {
+        const osc = ac.createOscillator();
+        const g = ac.createGain();
+        osc.connect(g); g.connect(ac.destination);
+        osc.type = 'triangle';
+        osc.frequency.value = f;
+        g.gain.setValueAtTime(0.06, t + i * 0.25);
+        g.gain.exponentialRampToValueAtTime(0.001, t + i*0.25 + 0.22);
+        osc.start(t + i*0.25);
+        osc.stop(t + i*0.25 + 0.25);
+        bgMusicNodes.push(osc);
+      });
+      t += melody.length * 0.25;
+      if (Game.state === 'playing') bgMusicInterval = setTimeout(loop, (melody.length * 0.25 - (ac.currentTime - (t - melody.length*0.25)))*1000 );
+    };
+    bgMusicInterval = setTimeout(loop, 10);
+  } catch(e) {}
+}
+let bgMusicInterval = null;
+function stopBgMusic() { if (bgMusicInterval) clearTimeout(bgMusicInterval); bgMusicNodes = []; }
+
+// ─── Scenes ───────────────────────────────────────────────────────────────────
+const SCENES = [
+  {
+    name: '城市人行道',
+    bgColor: '#4a5568',
+    drawBg: (ctx) => {
+      // Sky
+      const sky = ctx.createLinearGradient(0,0,0,200);
+      sky.addColorStop(0,'#87CEEB'); sky.addColorStop(1,'#B0E0FF');
+      ctx.fillStyle = sky; ctx.fillRect(0,0,W,200);
+      // Buildings
+      const blds = [[50,80,100,200,'#5c6bc0'],[200,60,80,220,'#7986cb'],[330,40,120,230,'#4a5568'],
+                    [500,70,90,210,'#546e7a'],[640,50,110,220,'#607d8b'],[720,80,80,200,'#78909c']];
+      blds.forEach(([x,y,w,h,c])=>{ ctx.fillStyle=c; ctx.fillRect(x,y,w,h);
+        // windows
+        ctx.fillStyle='rgba(255,255,200,0.7)';
+        for(let wy=y+10;wy<y+h-10;wy+=20) for(let wx=x+8;wx<x+w-8;wx+=18) { ctx.fillRect(wx,wy,10,12); }
+      });
+      // Road
+      ctx.fillStyle='#555'; ctx.fillRect(0,300,W,H-300);
+      // Sidewalk
+      ctx.fillStyle='#a89070'; ctx.fillRect(0,280,W,60);
+      // Road markings
+      ctx.setLineDash([30,20]); ctx.strokeStyle='rgba(255,255,0,0.4)'; ctx.lineWidth=3;
+      ctx.beginPath(); ctx.moveTo(0,380); ctx.lineTo(W,380); ctx.stroke();
+      ctx.setLineDash([]);
+      // Trees
+      [80,250,450,620,750].forEach(x=>{ ctx.fillStyle='#4a7c59'; ctx.beginPath(); ctx.arc(x,265,20,0,Math.PI*2); ctx.fill(); ctx.fillStyle='#6b4226'; ctx.fillRect(x-4,275,8,25); });
+      // No Smoking Sign
+      drawNoSmokingSign(ctx, 380, 170);
+    }
+  },
+  {
+    name: '公共厕所楼道',
+    bgColor: '#2d3748',
+    drawBg: (ctx) => {
+      // Floor
+      const fl = ctx.createLinearGradient(0,0,0,H);
+      fl.addColorStop(0,'#e8e8d8'); fl.addColorStop(1,'#c8c8b8');
+      ctx.fillStyle=fl; ctx.fillRect(0,0,W,H);
+      // Tiles
+      ctx.strokeStyle='rgba(150,150,130,0.4)'; ctx.lineWidth=1;
+      for(let x=0;x<W;x+=50) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+      for(let y=0;y<H;y+=50) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+      // Walls - left & right darkness
+      const wallL = ctx.createLinearGradient(0,0,120,0);
+      wallL.addColorStop(0,'rgba(0,0,0,0.5)'); wallL.addColorStop(1,'transparent');
+      ctx.fillStyle=wallL; ctx.fillRect(0,0,120,H);
+      const wallR = ctx.createLinearGradient(W-120,0,W,0);
+      wallR.addColorStop(0,'transparent'); wallR.addColorStop(1,'rgba(0,0,0,0.5)');
+      ctx.fillStyle=wallR; ctx.fillRect(W-120,0,120,H);
+      // Doors
+      [[30,150],[680,150]].forEach(([x,y])=>{ ctx.fillStyle='#8b6914'; ctx.fillRect(x,y,60,140); ctx.fillStyle='rgba(255,200,100,0.15)'; ctx.fillRect(x+5,y+5,50,130); ctx.fillStyle='#a07820'; ctx.beginPath(); ctx.arc(x+45,y+75,5,0,Math.PI*2); ctx.fill(); });
+      // Fluorescent lights
+      for(let lx=150;lx<700;lx+=200){ ctx.fillStyle='rgba(255,255,240,0.9)'; ctx.fillRect(lx,0,80,8); const glow=ctx.createRadialGradient(lx+40,4,2,lx+40,4,100); glow.addColorStop(0,'rgba(255,255,220,0.25)'); glow.addColorStop(1,'transparent'); ctx.fillStyle=glow; ctx.fillRect(lx-60,0,200,200); }
+      // Signs
+      ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(60,20,100,30); ctx.fillStyle='#fff'; ctx.font='13px Arial'; ctx.textAlign='center'; ctx.fillText('🚻 厕所',110,40);
+      drawNoSmokingSign(ctx, 400, 30);
+      // Pipes
+      ctx.fillStyle='#888'; ctx.fillRect(160,0,12,H); ctx.fillRect(620,0,12,H);
+    }
+  },
+  {
+    name: '机场进门口',
+    bgColor: '#1a237e',
+    drawBg: (ctx) => {
+      // Sky outside
+      const sky=ctx.createLinearGradient(0,0,0,250);
+      sky.addColorStop(0,'#1565C0'); sky.addColorStop(1,'#42A5F5');
+      ctx.fillStyle=sky; ctx.fillRect(0,0,W,250);
+      // Airport building upper
+      ctx.fillStyle='#e0e8f0'; ctx.fillRect(0,180,W,H-180);
+      // Glass facade
+      for(let gx=0;gx<W;gx+=60){ const g=ctx.createLinearGradient(gx,180,gx+55,250); g.addColorStop(0,'rgba(100,180,255,0.4)'); g.addColorStop(1,'rgba(50,100,200,0.2)'); ctx.fillStyle=g; ctx.fillRect(gx,180,55,70); ctx.strokeStyle='rgba(200,220,255,0.5)'; ctx.lineWidth=1; ctx.strokeRect(gx,180,55,70); }
+      // Entrance columns
+      [80,680].forEach(x=>{ ctx.fillStyle='#cfd8dc'; ctx.fillRect(x,200,30,H-200); const shine=ctx.createLinearGradient(x,0,x+30,0); shine.addColorStop(0,'rgba(255,255,255,0.3)'); shine.addColorStop(0.5,'rgba(255,255,255,0.1)'); shine.addColorStop(1,'transparent'); ctx.fillStyle=shine; ctx.fillRect(x,200,30,H-200); });
+      // Entrance sign
+      ctx.fillStyle='rgba(0,60,150,0.9)'; ctx.fillRect(200,190,400,40);
+      ctx.fillStyle='#fff'; ctx.font='bold 18px Arial'; ctx.textAlign='center'; ctx.fillText('✈ 欢迎来到国际机场  INTERNATIONAL AIRPORT',400,216);
+      // Floor - polished
+      const floor=ctx.createLinearGradient(0,340,0,H);
+      floor.addColorStop(0,'#eceff1'); floor.addColorStop(1,'#b0bec5');
+      ctx.fillStyle=floor; ctx.fillRect(0,340,W,H-340);
+      // Floor reflection lines
+      ctx.strokeStyle='rgba(180,200,220,0.4)'; ctx.lineWidth=1;
+      for(let fx=0;fx<W;fx+=80){ ctx.beginPath(); ctx.moveTo(fx,340); ctx.lineTo(fx,H); ctx.stroke(); }
+      // Automatic doors
+      ctx.fillStyle='rgba(180,220,255,0.3)'; ctx.fillRect(300,250,80,90); ctx.fillRect(420,250,80,90);
+      ctx.strokeStyle='rgba(100,180,255,0.7)'; ctx.lineWidth=2; ctx.strokeRect(300,250,80,90); ctx.strokeRect(420,250,80,90);
+      ctx.fillStyle='rgba(100,180,255,0.5)'; ctx.font='11px Arial'; ctx.textAlign='center'; ctx.fillText('自动门',340,300); ctx.fillText('自动门',460,300);
+      // Luggage trolleys
+      drawTrolley(ctx, 600, 350);
+      drawTrolley(ctx, 160, 370);
+      // Airplanes visible outside
+      ctx.fillStyle='rgba(255,255,255,0.7)'; ctx.font='36px Arial'; ctx.fillText('✈',680,100); ctx.font='24px Arial'; ctx.fillText('✈',100,140);
+      // No smoking
+      drawNoSmokingSign(ctx, 400, 240);
+      drawNoSmokingSign(ctx, 650, 195);
+    }
+  }
+];
+
+function drawTrolley(ctx, x, y) {
+  ctx.fillStyle='#90a4ae'; ctx.fillRect(x,y,40,5); ctx.fillRect(x+15,y-30,5,30); ctx.fillRect(x,y+5,5,15); ctx.fillRect(x+35,y+5,5,15);
+  ctx.fillStyle='#546e7a'; ctx.fillRect(x+2,y-25,36,20);
+}
+
+function drawNoSmokingSign(ctx, cx, cy) {
+  ctx.save();
+  // White circle bg
+  ctx.beginPath(); ctx.arc(cx, cy, 22, 0, Math.PI*2);
+  ctx.fillStyle='white'; ctx.fill();
+  ctx.strokeStyle='#e53935'; ctx.lineWidth=3; ctx.stroke();
+  // Cigarette
+  ctx.strokeStyle='#555'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.moveTo(cx-12, cy+8); ctx.lineTo(cx+12, cy-8); ctx.stroke();
+  ctx.fillStyle='#ff8a65'; ctx.beginPath(); ctx.arc(cx-12, cy+8, 4, 0, Math.PI*2); ctx.fill();
+  // Smoke lines
+  ctx.strokeStyle='rgba(150,150,150,0.6)'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(cx-8,cy+2); ctx.bezierCurveTo(cx-5,cy-5,cx-10,cy-10,cx-7,cy-18); ctx.stroke();
+  // Red cross line
+  ctx.strokeStyle='#e53935'; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(cx-16, cy+12); ctx.lineTo(cx+16, cy-12); ctx.stroke();
+  // Border
+  ctx.beginPath(); ctx.arc(cx, cy, 22, 0, Math.PI*2);
+  ctx.strokeStyle='#e53935'; ctx.lineWidth=3; ctx.stroke();
+  ctx.restore();
+}
+
+// ─── Game State ───────────────────────────────────────────────────────────────
+const Game = {
+  state: 'title', // title | sceneSelect | playing | gameover | victory
+  sceneIdx: 0,
+  frame: 0,
+  lastTime: 0,
+
+  // Player
+  player: { x: 400, y: 400, vx: 0, vy: 0, dir: 0, health: 100, money: 0, invincible: 0, blinkTimer: 0 },
+  keys: {},
+  mouse: { x: 400, y: 300, down: false },
+
+  // Entities
+  smokers: [],
+  bullets: [],
+  particles: [],
+  vulnerable: [],
+  floatScores: [],
+
+  // Smoke
+  smokePct: 0,
+  smokeParticles: [],
+
+  smokerSpawnTimer: 0,
+  vulnerableSpawnTimer: 0,
+  gameTime: 0,
+
+  init() {
+    canvas.addEventListener('mousemove', e => { const r=canvas.getBoundingClientRect(); Game.mouse.x=e.clientX-r.left; Game.mouse.y=e.clientY-r.top; });
+    canvas.addEventListener('mousedown', e => { if(Game.state==='playing'){ Game.mouse.down=true; Game.shoot(); } });
+    canvas.addEventListener('mouseup', () => { Game.mouse.down=false; });
+    window.addEventListener('keydown', e => { Game.keys[e.key]=true; if(['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault(); });
+    window.addEventListener('keyup', e => { Game.keys[e.key]=false; });
+    requestAnimationFrame(t => Game.loop(t));
+  },
+
+  showTitle() { Game.state='title'; stopBgMusic(); show('titleScreen'); hide('sceneSelect'); hide('gameOverScreen'); hide('victoryScreen'); },
+  showSceneSelect() { Game.state='sceneSelect'; stopBgMusic(); hide('titleScreen'); show('sceneSelect'); hide('gameOverScreen'); hide('victoryScreen'); },
+
+  startScene(idx) {
+    Game.sceneIdx = idx;
+    Game.state = 'playing';
+    Game.frame = 0;
+    Game.gameTime = 0;
+    const p = Game.player;
+    p.x=400; p.y=400; p.vx=0; p.vy=0; p.health=100; p.money=0; p.invincible=0; p.blinkTimer=0;
+    Game.smokers=[]; Game.bullets=[]; Game.particles=[]; Game.vulnerable=[]; Game.floatScores=[];
+    Game.smokePct=0; Game.smokeParticles=[];
+    Game.smokerSpawnTimer=0; Game.vulnerableSpawnTimer=0;
+    Game.smokeHalfTriggered=false;
+    hide('sceneSelect'); hide('titleScreen'); hide('gameOverScreen'); hide('victoryScreen');
+    document.getElementById('sceneName').textContent = SCENES[idx].name;
+    startBgMusic();
+    Game.spawnSmokers(3);
+  },
+
+  restartScene() { Game.startScene(Game.sceneIdx); },
+
+  shoot() {
+    sfxShoot();
+    const p = Game.player;
+    const dx = Game.mouse.x - p.x, dy = Game.mouse.y - p.y;
+    const dist = Math.hypot(dx, dy) || 1;
+    // Shoot 3 water droplets in spread
+    for(let i=-1;i<=1;i++){
+      const angle = Math.atan2(dy,dx) + i*0.12;
+      Game.bullets.push({ x:p.x, y:p.y, vx:Math.cos(angle)*12, vy:Math.sin(angle)*12, life:60 });
+    }
+    // Water particles
+    for(let i=0;i<8;i++){
+      const a=Math.atan2(dy,dx)+( Math.random()-0.5)*0.5;
+      Game.particles.push({ x:p.x, y:p.y, vx:Math.cos(a)*(8+Math.random()*4), vy:Math.sin(a)*(8+Math.random()*4), life:20, type:'water', r:3+Math.random()*3 });
+    }
+  },
+
+  spawnSmokers(n) {
+    for(let i=0;i<n;i++) {
+      const side = Math.random()<0.5 ? -60 : W+60;
+      const y = 280 + Math.random()*(H-340);
+      const spd = 0.6 + Math.random()*0.8;
+      const dir = side < 0 ? 1 : -1;
+      Game.smokers.push({
+        x: side, y: y + Math.random()*20-10,
+        vx: dir * spd, vy: (Math.random()-0.5)*0.4,
+        smokeTimer: 0,
+        health: 100,
+        blushing: 0,
+        leaving: false,
+        leaveVx: 0, leaveVy: 0,
+        id: Math.random(),
+        hat: Math.random()<0.5,
+        shirtColor: `hsl(${Math.random()*360},60%,50%)`,
+        size: 0.9+Math.random()*0.3
+      });
+    }
+  },
+
+  spawnVulnerable(n) {
+    const types = ['🤰','👶','🧒','👴','👵','♿'];
+    for(let i=0;i<n;i++){
+      const side = Math.random()<0.5 ? -50 : W+50;
+      const y = 290+Math.random()*(H-360);
+      const dir = side<0?1:-1;
+      Game.vulnerable.push({
+        x:side, y:y,
+        vx: dir*(0.3+Math.random()*0.3), vy:(Math.random()-0.5)*0.2,
+        type: types[Math.floor(Math.random()*types.length)],
+        id: Math.random()
+      });
+    }
+  },
+
+  loop(timestamp) {
+    const dt = Math.min((timestamp - Game.lastTime)/16.67, 3);
+    Game.lastTime = timestamp;
+    if(Game.state==='playing') Game.update(dt);
+    Game.draw();
+    requestAnimationFrame(t => Game.loop(t));
+  },
+
+  update(dt) {
+    Game.frame++;
+    Game.gameTime += dt;
+
+    const p = Game.player;
+    const spd = 3.5;
+    let mx=0,my=0;
+    if(Game.keys['ArrowLeft']||Game.keys['a']||Game.keys['A']) mx-=1;
+    if(Game.keys['ArrowRight']||Game.keys['d']||Game.keys['D']) mx+=1;
+    if(Game.keys['ArrowUp']||Game.keys['w']||Game.keys['W']) my-=1;
+    if(Game.keys['ArrowDown']||Game.keys['s']||Game.keys['S']) my+=1;
+    if(mx&&my){mx*=0.707;my*=0.707;}
+    p.vx += (mx*spd-p.vx)*0.25;
+    p.vy += (my*spd-p.vy)*0.25;
+    p.x = Math.max(20,Math.min(W-20, p.x+p.vx*dt));
+    p.y = Math.max(270,Math.min(H-20, p.y+p.vy*dt));
+    if(mx||my) p.dir = Math.atan2(my,mx);
+
+    if(p.invincible>0) p.invincible-=dt;
+    if(p.blinkTimer>0) p.blinkTimer-=dt;
+
+    // Auto-shoot if holding mouse
+    if(Game.mouse.down && Game.frame%8===0) Game.shoot();
+
+    // Spawn smokers
+    Game.smokerSpawnTimer -= dt;
+    if(Game.smokerSpawnTimer <= 0) {
+      Game.spawnSmokers(1+(Game.sceneIdx===1?1:0));
+      Game.smokerSpawnTimer = 220 - Game.gameTime*0.3;
+      if(Game.smokerSpawnTimer<80) Game.smokerSpawnTimer=80;
+    }
+
+    // Spawn vulnerable when money>=100
+    if(p.money>=100) {
+      Game.vulnerableSpawnTimer -= dt;
+      if(Game.vulnerableSpawnTimer<=0) {
+        Game.spawnVulnerable(1);
+        Game.vulnerableSpawnTimer = 300+Math.random()*200;
+      }
+    }
+
+    // Update bullets
+    Game.bullets = Game.bullets.filter(b => {
+      b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
+      if(b.x<0||b.x>W||b.y<0||b.y>H||b.life<=0) return false;
+      // Splash particles trail
+      if(Game.frame%3===0) Game.particles.push({x:b.x,y:b.y,vx:(Math.random()-0.5)*2,vy:(Math.random()-0.5)*2,life:8,type:'water',r:2});
+      // Hit smoker?
+      for(let i=Game.smokers.length-1;i>=0;i--){
+        const s=Game.smokers[i];
+        if(!s.leaving && Math.hypot(b.x-s.x,b.y-s.y)<22*s.size){
+          s.health -= 35;
+          for(let k=0;k<12;k++) Game.particles.push({x:s.x,y:s.y,vx:(Math.random()-0.5)*5,vy:(Math.random()-0.5)*5-2,life:25,type:'water',r:4});
+          if(s.health<=0){
+            sfxHit(); sfxMoney();
+            s.blushing=120; s.leaving=true;
+            const a=Math.atan2(s.y-p.y,s.x-p.x);
+            s.leaveVx=Math.cos(a)*3; s.leaveVy=Math.sin(a)*3-1;
+            p.money+=20;
+            Game.floatScores.push({x:s.x,y:s.y-20,text:'+¥20',life:60});
+            // Smoke burst
+            for(let k=0;k<20;k++) Game.particles.push({x:s.x,y:s.y,vx:(Math.random()-0.5)*4,vy:-Math.random()*3,life:40,type:'smoke_puff',r:8+Math.random()*8,alpha:0.8});
+          } else sfxHit();
+          return false;
+        }
+      }
+      return true;
+    });
+
+    // Update smokers
+    Game.smokers = Game.smokers.filter(s => {
+      if(s.leaving){
+        s.x+=s.leaveVx*dt; s.y+=s.leaveVy*dt;
+        s.blushing-=dt;
+        return s.x>-100&&s.x<W+100&&s.y>-100&&s.y<H+100;
+      }
+      s.x+=s.vx*dt; s.y+=s.vy*dt;
+      s.y+=Math.sin(Game.frame*0.05+s.id*10)*0.15;
+      // Wrap around
+      if(s.x<-80) s.x=W+80;
+      if(s.x>W+80) s.x=-80;
+      if(s.y<270) s.y=270;
+      if(s.y>H-20) s.y=H-20;
+
+      // Emit smoke
+      s.smokeTimer-=dt;
+      if(s.smokeTimer<=0){
+        s.smokeTimer=20+Math.random()*10;
+        const numPuffs = Game.sceneIdx===1?3:2;
+        for(let k=0;k<numPuffs;k++){
+          Game.smokeParticles.push({ x:s.x+(Math.random()-0.5)*10, y:s.y-30, vx:(Math.random()-0.5)*0.8, vy:-0.5-Math.random()*0.5, life:120+Math.random()*80, r:8+Math.random()*8, alpha:0.6, growing:true });
+        }
+        Game.smokePct = Math.min(1, Game.smokePct + 0.0022 * (Game.sceneIdx===1?1.5:1));
+      }
+
+      // Near vulnerable -> faster damage
+      let nearVulnerable = false;
+      Game.vulnerable.forEach(v=>{ if(Math.hypot(s.x-v.x,s.y-v.y)<60) nearVulnerable=true; });
+
+      // Damage player from nearby smoker (much gentler)
+      const distToPlayer = Math.hypot(s.x-p.x,s.y-p.y);
+      if(distToPlayer<50 && p.invincible<=0){
+        const dmg = nearVulnerable ? 0.04 : 0.015;
+        p.health-=dmg*dt;
+        p.blinkTimer=20;
+        if(p.health<0) p.health=0;
+      }
+      return true;
+    });
+
+    // Smoke damage
+    // When smoke first crosses 50%, clamp health to 80% (one-time penalty)
+    if(Game.smokePct>=0.5 && !Game.smokeHalfTriggered){
+      Game.smokeHalfTriggered = true;
+      if(p.health > 80) { p.health = 80; sfxDamage(); }
+    }
+    if(Game.smokePct<0.5) Game.smokeHalfTriggered = false; // reset if smoke drops back
+    // Continuous damage only while smoke is above 50% and still rising
+    if(Game.smokePct>0.5){
+      const extra = (Game.smokePct-0.5)*2.5;  // softer coefficient
+      p.health -= (0.008 + extra*0.025)*dt;
+      if(p.blinkTimer<=0 && Math.random()<0.04) sfxDamage();
+    }
+    if(Game.smokePct>=1.0 && p.health>0){ p.health=0; }
+    Game.smokePct = Math.min(1, Game.smokePct);
+    // Slowly dissipate smoke if few smokers
+    if(Game.smokers.length<3) Game.smokePct=Math.max(0,Game.smokePct-0.0003*dt);
+
+    // Update smoke particles
+    Game.smokeParticles = Game.smokeParticles.filter(sp=>{
+      sp.x+=sp.vx*dt; sp.y+=sp.vy*dt*0.8;
+      sp.vx+=(Math.random()-0.5)*0.1; sp.vy-=0.01;
+      sp.life-=dt;
+      if(sp.growing&&sp.r<30){ sp.r+=0.15*dt; }
+      sp.alpha=Math.max(0,(sp.life/180)*0.5);
+      return sp.life>0;
+    });
+    // Limit
+    if(Game.smokeParticles.length>300) Game.smokeParticles.splice(0,50);
+
+    // Update particles
+    Game.particles = Game.particles.filter(pt=>{
+      pt.x+=pt.vx*dt; pt.y+=pt.vy*dt; pt.vy+=0.2*dt; pt.life-=dt;
+      return pt.life>0;
+    });
+
+    // Float scores
+    Game.floatScores = Game.floatScores.filter(f=>{ f.life-=dt; return f.life>0; });
+
+    // Update vulnerable
+    Game.vulnerable = Game.vulnerable.filter(v=>{
+      v.x+=v.vx*dt; v.y+=v.vy*dt;
+      v.y+=Math.sin(Game.frame*0.03+v.id*5)*0.1;
+      if(v.y<270) v.y=270; if(v.y>H-20) v.y=H-20;
+      return v.x>-100&&v.x<W+100;
+    });
+
+    // Check game over
+    if(p.health<=0){ p.health=0; Game.gameOver(); }
+
+    // Update HUD
+    document.getElementById('healthFill').style.width = p.health+'%';
+    const hue = p.health>60?120:p.health>30?60:0;
+    document.getElementById('healthFill').style.background = `hsl(${hue},80%,50%)`;
+    document.getElementById('smokeFill').style.width = (Game.smokePct*100)+'%';
+    document.getElementById('moneyDisplay').textContent = '💰 ¥'+p.money;
+  },
+
+  gameOver() {
+    Game.state='gameover'; stopBgMusic(); sfxGameOver();
+    show('gameOverScreen');
+  },
+
+  draw() {
+    ctx.clearRect(0,0,W,H);
+
+    if(Game.state==='playing' || Game.state==='gameover') {
+      // Draw background
+      SCENES[Game.sceneIdx].drawBg(ctx);
+
+      // Smoke overlay
+      if(Game.smokeParticles.length>0){
+        Game.smokeParticles.forEach(sp=>{
+          const g=ctx.createRadialGradient(sp.x,sp.y,0,sp.x,sp.y,sp.r);
+          g.addColorStop(0,`rgba(200,210,220,${sp.alpha})`);
+          g.addColorStop(1,'transparent');
+          ctx.fillStyle=g; ctx.beginPath(); ctx.arc(sp.x,sp.y,sp.r,0,Math.PI*2); ctx.fill();
+        });
+      }
+      // Global smoke tint
+      if(Game.smokePct>0){
+        ctx.fillStyle=`rgba(180,190,200,${Game.smokePct*0.55})`;
+        ctx.fillRect(0,0,W,H);
+        // Swirling smoke bands
+        ctx.save();
+        ctx.globalAlpha=Game.smokePct*0.25;
+        for(let i=0;i<5;i++){
+          const y=50+i*100+Math.sin(Game.frame*0.008+i)*30;
+          const g=ctx.createLinearGradient(0,y-30,0,y+30);
+          g.addColorStop(0,'transparent'); g.addColorStop(0.5,'rgba(170,185,200,0.8)'); g.addColorStop(1,'transparent');
+          ctx.fillStyle=g; ctx.fillRect(0,y-30,W,60);
+        }
+        ctx.restore();
+      }
+
+      // Draw vulnerable
+      Game.vulnerable.forEach(v=>{
+        ctx.save();
+        ctx.font=`${36}px Arial`; ctx.textAlign='center';
+        ctx.fillText(v.type,v.x,v.y);
+        // Glow aura
+        const ga=ctx.createRadialGradient(v.x,v.y-10,5,v.x,v.y-10,35);
+        ga.addColorStop(0,'rgba(255,220,255,0.3)'); ga.addColorStop(1,'transparent');
+        ctx.fillStyle=ga; ctx.beginPath(); ctx.arc(v.x,v.y-10,35,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      });
+
+      // Draw smokers
+      Game.smokers.forEach(s => drawSmoker(s));
+
+      // Draw bullets
+      Game.bullets.forEach(b=>{
+        const g=ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,5);
+        g.addColorStop(0,'rgba(120,200,255,1)'); g.addColorStop(1,'rgba(50,150,255,0)');
+        ctx.fillStyle=g; ctx.beginPath(); ctx.arc(b.x,b.y,5,0,Math.PI*2); ctx.fill();
+      });
+
+      // Draw particles
+      Game.particles.forEach(pt=>{
+        ctx.save(); ctx.globalAlpha=pt.life/25;
+        if(pt.type==='water'){ ctx.fillStyle='rgba(80,180,255,0.8)'; }
+        else if(pt.type==='smoke_puff'){ ctx.fillStyle=`rgba(180,180,180,${pt.alpha||0.3})`; }
+        else ctx.fillStyle='rgba(255,200,100,0.8)';
+        ctx.beginPath(); ctx.arc(pt.x,pt.y,pt.r,0,Math.PI*2); ctx.fill();
+        ctx.restore();
+      });
+
+      // Draw player
+      drawPlayer(Game.player);
+
+      // Float scores
+      Game.floatScores.forEach(f=>{
+        ctx.save();
+        ctx.globalAlpha=f.life/60;
+        ctx.font='bold 20px Arial'; ctx.textAlign='center';
+        ctx.fillStyle='#ffe066'; ctx.strokeStyle='#000'; ctx.lineWidth=3;
+        const yOff=(60-f.life)*0.8;
+        ctx.strokeText(f.text,f.x,f.y-yOff); ctx.fillText(f.text,f.x,f.y-yOff);
+        ctx.restore();
+      });
+    }
+  }
+};
+
+// ─── Drawing helpers ─────────────────────────────────────────────────────────
+function drawPlayer(p) {
+  const blink = p.blinkTimer > 0 && Math.floor(p.blinkTimer)%4<2;
+  if(blink) return;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(0,18,16,5,0,0,Math.PI*2); ctx.fill();
+
+  // Body - police uniform (blue)
+  ctx.fillStyle='#1565c0';
+  ctx.beginPath(); ctx.roundRect(-13,-5,26,28,4); ctx.fill();
+  // Belt
+  ctx.fillStyle='#333'; ctx.fillRect(-13,15,26,5);
+  ctx.fillStyle='#ffd700'; ctx.fillRect(-4,15,8,5);
+  // Badge
+  ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(-5,-2,5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='#1565c0'; ctx.font='5px Arial'; ctx.textAlign='center'; ctx.fillText('⭐',-5,-1);
+
+  // Head
+  ctx.fillStyle='#FFCC99';
+  ctx.beginPath(); ctx.arc(0,-18,12,0,Math.PI*2); ctx.fill();
+  // Eyes
+  ctx.fillStyle='#333';
+  const eyeDir = Math.atan2(Game.mouse.y-p.y, Game.mouse.x-p.x);
+  const ex=Math.cos(eyeDir)*2, ey=Math.sin(eyeDir)*2;
+  ctx.beginPath(); ctx.arc(-4+ex,-18+ey,2.5,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(4+ex,-18+ey,2.5,0,Math.PI*2); ctx.fill();
+  // Smile
+  ctx.strokeStyle='#333'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(0,-16,4,0.2,Math.PI-0.2); ctx.stroke();
+
+  // Police cap
+  ctx.fillStyle='#0d47a1';
+  ctx.beginPath(); ctx.ellipse(0,-27,14,5,0,0,Math.PI*2); ctx.fill();
+  ctx.fillRect(-12,-32,24,6);
+  ctx.fillStyle='#ffd700'; ctx.beginPath(); ctx.arc(0,-29,3,0,Math.PI*2); ctx.fill();
+
+  // Gun arm pointing toward mouse
+  const ang = Math.atan2(Game.mouse.y-p.y, Game.mouse.x-p.x);
+  ctx.save(); ctx.rotate(ang);
+  ctx.fillStyle='#1565c0'; ctx.fillRect(8,-4,18,8);
+  // Water gun
+  ctx.fillStyle='#42a5f5';
+  ctx.beginPath(); ctx.roundRect(18,-5,20,10,3); ctx.fill();
+  ctx.fillStyle='#64b5f6'; ctx.fillRect(36,-2,6,4);
+  // Water drops animation
+  if(Game.frame%8<4){
+    ctx.fillStyle='rgba(120,200,255,0.9)'; ctx.beginPath(); ctx.arc(45,-1,3,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(50,2,2,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+
+  // Legs
+  const legSwing = Math.sin(Game.frame*0.25)*8;
+  ctx.fillStyle='#1565c0';
+  ctx.fillRect(-9,22,8,16+legSwing);
+  ctx.fillRect(1,22,8,16-legSwing);
+  // Shoes
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.roundRect(-11,37+legSwing,12,6,2); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(-1,37-legSwing,12,6,2); ctx.fill();
+
+  ctx.restore();
+}
+
+function drawSmoker(s) {
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.scale(s.size, s.size);
+  if(s.vx<0) ctx.scale(-1,1);
+
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(0,18,13,4,0,0,Math.PI*2); ctx.fill();
+
+  // Body
+  ctx.fillStyle=s.shirtColor;
+  ctx.beginPath(); ctx.roundRect(-11,-4,22,24,3); ctx.fill();
+  // Pants
+  ctx.fillStyle='#5d4037'; ctx.fillRect(-11,18,22,10);
+  // Legs
+  const legSwing=Math.sin(Game.frame*0.2+s.id*5)*6;
+  ctx.fillRect(-9,26,7,12+legSwing); ctx.fillRect(2,26,7,12-legSwing);
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.roundRect(-11,37+legSwing,10,5,2); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(-1,37-legSwing,10,5,2); ctx.fill();
+
+  // Head
+  const faceColor = s.blushing>0 ? '#ffaaaa' : '#FFCC99';
+  ctx.fillStyle=faceColor;
+  ctx.beginPath(); ctx.arc(0,-16,11,0,Math.PI*2); ctx.fill();
+  // Blush
+  if(s.blushing>0){
+    ctx.fillStyle='rgba(255,80,80,0.5)';
+    ctx.beginPath(); ctx.ellipse(-5,-14,5,3,0,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(5,-14,5,3,0,0,Math.PI*2); ctx.fill();
+  }
+  // Eyes
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(-3,-16,2,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3,-16,2,0,Math.PI*2); ctx.fill();
+  if(s.blushing>0){
+    // Embarrassed X eyes
+    ctx.strokeStyle='#333'; ctx.lineWidth=1.5;
+    [[-3,-16],[3,-16]].forEach(([ex,ey])=>{ ctx.beginPath(); ctx.moveTo(ex-2,ey-2); ctx.lineTo(ex+2,ey+2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(ex+2,ey-2); ctx.lineTo(ex-2,ey+2); ctx.stroke(); });
+  }
+  // Hair / hat
+  if(s.hat){ ctx.fillStyle='#5d4037'; ctx.fillRect(-12,-26,24,5); ctx.fillRect(-8,-36,16,12); }
+  else { ctx.fillStyle='#4e342e'; ctx.beginPath(); ctx.arc(0,-24,11,Math.PI,0); ctx.fill(); }
+
+  // Cigarette in mouth
+  if(!s.leaving){
+    ctx.save();
+    ctx.rotate(0.3);
+    ctx.fillStyle='#f5f5f5'; ctx.fillRect(8,-12,16,3);
+    ctx.fillStyle='#ff5722'; ctx.beginPath(); ctx.arc(24,-10,3,0,Math.PI*2); ctx.fill();
+    // Smoke from cigarette
+    if(Game.frame%15<8){
+      ctx.save(); ctx.globalAlpha=0.5;
+      ctx.strokeStyle='rgba(200,200,200,0.7)'; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.moveTo(24,-10); ctx.bezierCurveTo(26,-20,22,-28,28,-35); ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  ctx.restore();
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function show(id){ document.getElementById(id).style.display='flex'; }
+function hide(id){ document.getElementById(id).style.display='none'; }
+
+// Polyfill roundRect for older browsers
+if(!CanvasRenderingContext2D.prototype.roundRect){
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    this.beginPath();
+    this.moveTo(x+r,y); this.lineTo(x+w-r,y); this.quadraticCurveTo(x+w,y,x+w,y+r);
+    this.lineTo(x+w,y+h-r); this.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+    this.lineTo(x+r,y+h); this.quadraticCurveTo(x,y+h,x,y+h-r);
+    this.lineTo(x,y+r); this.quadraticCurveTo(x,y,x+r,y);
+    this.closePath();
+  };
+}
+
+// Start
+Game.init();
+</script>
+</body>
+</html>
