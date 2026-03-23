@@ -56,6 +56,10 @@
   .facts-box h3 { color: #ffaa44; font-size: 16px; margin-bottom: 12px; }
   .facts-box p { color: #ddd; font-size: 13px; line-height: 1.8; }
   .facts-box strong { color: #ff8866; }
+  .facts-links { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.15); }
+  .facts-links a { color: #64b5f6; font-size: 12px; text-decoration: none; margin-right: 14px; transition: color 0.2s; display: inline-block; }
+  .facts-links a:hover { color: #90caf9; text-decoration: underline; }
+  .facts-links a::before { content: '📚 '; }
 
   /* Floating score */
   .float-score { position: absolute; font-size: 20px; font-weight: bold; color: #ffe066; text-shadow: 0 0 8px #ff8800; pointer-events: none; z-index: 30; animation: floatUp 1s forwards; }
@@ -133,6 +137,11 @@
         🌍 全球每年有约 <strong>120 万人</strong>死于二手烟危害——他们从未吸过一根烟。<br><br>
         <strong style="color:#ffee88">请自觉遵守禁烟规定，不在公共场合吸烟，保护他人健康！</strong>
       </p>
+      <div class="facts-links">
+        <a href="https://www.chinacdc.cn/jiankang121/zwdt/201603/t20160301_127835.html" target="_blank">中国疾控中心</a>
+        <a href="https://www.who.int/zh/health-topics/tobacco" target="_blank">世界卫生组织</a>
+        <a href="https://www.health.harvard.edu/staying-healthy/secondhand-smoke-danger-just-as-real" target="_blank">哈佛健康</a>
+      </div>
     </div>
     <div style="display:flex;gap:12px">
       <button class="btn btn-danger" onclick="Game.restartScene()">🔄 再战一次</button>
@@ -928,6 +937,7 @@ function drawVulnerable(v) {
   ctx.restore();
 
   // ── 气泡 & 文字：在 restore() 之后用世界坐标绘制，永远正向 ──
+  ctx.save(); // 再加一层 save/restore 确保状态纯净
   const wx = v.x, wy = v.y;
 
   if(v.reaction==='cough'){
@@ -956,6 +966,7 @@ function drawVulnerable(v) {
     ctx.fillStyle='#c0392b'; ctx.font='bold 11px Arial'; ctx.textAlign='center';
     ctx.fillText(v.speechText, wx, by+17);
   }
+  ctx.restore();
 }
 
 // shared face drawing: cough/frown/normal
